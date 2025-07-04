@@ -1,0 +1,38 @@
+version: "3.9"
+
+services:
+  minio:
+    image: minio/minio
+    container_name: local-minio
+    ports:
+      - "${MINIO_PORT}:9000"
+      - "${MINIO_CONSOLE_PORT}:9001"
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
+    command: server /data --console-address ":9001"
+    volumes:
+      - minio-data:/data
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:${MINIO_PORT}/minio/health/live"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  generator:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    depends_on:
+      minio:
+        condition: service_healthy
+    environment:
+      MINIO_HOST: minio:${MINIO_PORT}
+      MINIO_USER: ${MINIO_ROOT_USER}
+      MINIO_PASSWORD: ${MINIO_ROOT_PASSWORD}
+    volumes:
+      - ./config:/config
+    command: ["-config=/config/config.json"]
+
+volumes:
+  minio-data:
