@@ -14,7 +14,7 @@ type Config struct {
 	SkipTagsProbability float64           `json:"skip_tags_probability"`
 	CleanBuckets        bool              `json:"clean_buckets"`
 	Kafka               *KafkaConfig      `json:"kafka,omitempty"`
-	NumWorkers          int               `json:"num_workers`
+	NumWorkers          int               `json:"num_workers"`
 }
 
 type KafkaConfig struct {
