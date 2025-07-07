@@ -6,18 +6,17 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"time"
 
 	"minio-fixture-generator/internal/config"
-	"minio-fixture-generator/internal/generator"
+	"minio-fixture-generator/internal/kafka"
 	"minio-fixture-generator/internal/miniohandler"
+	"minio-fixture-generator/internal/service"
 )
 
 func main() {
-	fmt.Println("os.Args:", os.Args)
-
-	configPath := flag.String("config", "config1.json", "Путь до JSON-конфига")
+	configPath := flag.String("config", "config.json", "Путь до JSON-конфига")
 	flag.Parse()
-	fmt.Println("Используемый путь к конфигу:", *configPath)
 
 	logger := log.New(os.Stdout, "", log.LstdFlags)
 
@@ -25,43 +24,62 @@ func main() {
 	if err != nil {
 		logger.Fatalf("Ошибка загрузки конфигурации: %v", err)
 	}
-	logger.Printf("Загружен конфиг: %+v", *cfg)
+
+	logger.Printf("Используем конфиг: %+v", *cfg)
 
 	ctx := context.Background()
+
+	// подключение к MinIO
 	client, err := miniohandler.New(ctx, logger)
 	if err != nil {
 		logger.Fatalf("Ошибка инициализации MinIO клиента: %v", err)
 	}
 
-	// создаем бакеты
-	for _, bucket := range cfg.Buckets {
-		err := client.CreateBucketIfNotExists(ctx, bucket)
+	start := time.Now()
+
+	var publisher *kafka.Publisher
+	if cfg.Kafka != nil && cfg.Kafka.Enabled {
+		publisher, err = kafka.NewPublisher(cfg.Kafka.Brokers, cfg.Kafka.Topic, logger)
 		if err != nil {
-			logger.Fatalf("Ошибка создания бакета %s: %v", bucket, err)
+			logger.Fatalf("Ошибка инициализации Kafka publisher: %v", err)
 		}
+		defer publisher.Close()
 	}
 
-	logger.Printf("Начинаем генерацию %d файлов...", cfg.FileCount)
+	// сервис генерации
+	genService := service.NewFileGenerator(cfg, client, publisher, logger)
 
-	for i := 0; i < cfg.FileCount; i++ {
-		bucket := cfg.Buckets[i%len(cfg.Buckets)]
-		fileType := cfg.FileTypes[i%len(cfg.FileTypes)]
-
-		file, err := generator.GenerateFile(generator.FileType(fileType), i+1)
-		if err != nil {
-			logger.Printf("Ошибка генерации файла: %v", err)
-			continue
-		}
-
-		tags := generator.GenerateTags(cfg.Tags, cfg.SkipTagsProbability)
-
-		err = client.UploadFile(ctx, bucket, file.Name, file.Content, tags)
-		if err != nil {
-			logger.Printf("Ошибка загрузки файла %s: %v", file.Name, err)
-		} else {
-			logger.Printf("✅ Загружен файл: %s → %s, теги: %+v", file.Name, bucket, tags)
-		}
+	stats, err := genService.Run(ctx)
+	if err != nil {
+		logger.Fatalf("Ошибка генерации файлов: %v", err)
 	}
 
-	logger.Println("Генерация и загрузка завершены.")
+	duration := time.Since(start)
+	logger.Println("✅ Работа сервиса завершена успешно.")
+	logger.Printf("Всего загружено файлов: %d", stats.TotalFiles)
+	logger.Printf("Всего отправлено сообщений в Kafka: %d", stats.TotalKafka)
+	logger.Printf("Общий размер загруженных данных: %s", humanReadableBytes(stats.TotalBytes))
+	logger.Printf("Продолжительность генерации: %s", duration)
+}
+
+func humanReadableBytes(bytes int64) string {
+	const (
+		KB = 1024
+		MB = 1024 * KB
+		GB = 1024 * MB
+		TB = 1024 * GB
+	)
+
+	switch {
+	case bytes >= TB:
+		return fmt.Sprintf("%.2f TB", float64(bytes)/float64(TB))
+	case bytes >= GB:
+		return fmt.Sprintf("%.2f GB", float64(bytes)/float64(GB))
+	case bytes >= MB:
+		return fmt.Sprintf("%.2f MB", float64(bytes)/float64(MB))
+	case bytes >= KB:
+		return fmt.Sprintf("%.2f KB", float64(bytes)/float64(KB))
+	default:
+		return fmt.Sprintf("%d B", bytes)
+	}
 }

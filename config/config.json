@@ -1,10 +1,12 @@
 {
-  "file_count": 50,
+  "file_count": 100000,
   "file_types": ["text", "image"],
   "buckets": ["test-bucket", "images"],
   "tags": {
     "entity_id": "uuid",
     "created_at": "random_date"
   },
-  "skip_tags_probability": 0.2
+  "skip_tags_probability": 0.2,
+  "clean_buckets": true,
+  "num_workers": 10
 }

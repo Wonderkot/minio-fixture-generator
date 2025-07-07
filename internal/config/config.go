@@ -12,6 +12,15 @@ type Config struct {
 	Buckets             []string          `json:"buckets"`
 	Tags                map[string]string `json:"tags"`
 	SkipTagsProbability float64           `json:"skip_tags_probability"`
+	CleanBuckets        bool              `json:"clean_buckets"`
+	Kafka               *KafkaConfig      `json:"kafka,omitempty"`
+	NumWorkers          int               `json:"num_workers`
+}
+
+type KafkaConfig struct {
+	Enabled bool     `json:"enabled"`
+	Brokers []string `json:"brokers"`
+	Topic   string   `json:"topic"`
 }
 
 func Load(path string) (*Config, error) {
@@ -45,4 +54,11 @@ func (c *Config) applyDefaults() {
 	if c.SkipTagsProbability < 0 || c.SkipTagsProbability > 1 {
 		c.SkipTagsProbability = 0
 	}
+}
+
+func (c *Config) WorkerCount() int {
+	if c.NumWorkers <= 0 {
+		return 5 // дефолт
+	}
+	return c.NumWorkers
 }

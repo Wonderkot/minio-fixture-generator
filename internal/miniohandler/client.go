@@ -97,3 +97,31 @@ func guessContentType(name string) string {
 	}
 	return "text/plain"
 }
+
+func (c *Client) ClearBucket(ctx context.Context, bucket string) error {
+	objectCh := make(chan minio.ObjectInfo, 100)
+
+	// запуск горутины для наполнения канала
+	go func() {
+		defer close(objectCh)
+		for obj := range c.Minio.ListObjects(ctx, bucket, minio.ListObjectsOptions{
+			Recursive: true,
+		}) {
+			if obj.Err != nil {
+				c.Logger.Printf("Ошибка чтения объекта: %v", obj.Err)
+				continue
+			}
+			objectCh <- obj
+		}
+	}()
+
+	// удаление объектов пакетами
+	for err := range c.Minio.RemoveObjects(ctx, bucket, objectCh, minio.RemoveObjectsOptions{}) {
+		if err.Err != nil {
+			return fmt.Errorf("ошибка удаления объекта %s: %v", err.ObjectName, err.Err)
+		}
+	}
+
+	c.Logger.Printf("Бакет %s очищен.", bucket)
+	return nil
+}
