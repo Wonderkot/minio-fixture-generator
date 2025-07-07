@@ -33,7 +33,7 @@ jobs:
         with:
           images: ${{ env.IMAGE_NAME }}
           tags: |
-            type=ref,event=push,ref=refs/heads/main,format=latest
+            type=ref,event=branch,ref=refs/heads/main,format=latest
             type=sha
 
       - name: Build and push image
