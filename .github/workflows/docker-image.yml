@@ -33,9 +33,7 @@ jobs:
         with:
           images: ${{ env.IMAGE_NAME }}
           tags: |
-            # всегда пушим latest при пуше в main
-            type=ref,ref=refs/heads/main,format=latest
-            # пушим SHA-таг образа для отката
+            type=ref,event=push,ref=refs/heads/main,format=latest
             type=sha
 
       - name: Build and push image
